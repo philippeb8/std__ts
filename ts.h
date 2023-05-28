@@ -35,7 +35,7 @@ namespace ts
 {
     
 template <template <typename...> class C, typename... Params>
-    class container : protected C<Params...>
+    class container : public C<Params...>
     {
     public:
         container() = default;
