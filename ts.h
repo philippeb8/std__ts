@@ -34,6 +34,64 @@ namespace std
 namespace ts
 {
     
+template <typename T>
+    class state_mutex : public T
+    {
+    public:
+        state_mutex() : locked_(false) 
+        {
+        }
+        
+        void lock()
+        {
+            T::lock();
+            locked_ = true;
+        }
+        
+        void unlock()
+        {
+            T::unlock();
+            locked_ = false;
+        }
+        
+        bool locked() const
+        {
+            return locked_;
+        }
+        
+    private:
+        bool locked_;
+    };
+    
+template <typename T>
+    class locked
+    {
+        std::lock_guard<state_mutex<std::recursive_mutex>> lock_;
+        state_mutex<std::recursive_mutex> & mutex_;
+        T value_;
+        
+    public:
+        locked(state_mutex<std::recursive_mutex> & mutex, T const & value)
+        : lock_(mutex), mutex_(mutex), value_(value)
+        {
+        }
+        
+        locked(locked const & other)
+        : lock_(other.mutex_), mutex_(other.mutex_), value_(other.value_)
+        {
+        }
+        
+        operator T & ()
+        {
+            return value_;
+        }
+
+        operator T const & () const
+        {
+            return value_;
+        }
+    };
+    
 template <template <typename...> class C, typename... Params>
     class container : public C<Params...>
     {
@@ -42,7 +100,7 @@ template <template <typename...> class C, typename... Params>
         
         container(const container& other)
         {
-            std::lock_guard<std::mutex> lock(mutex_, other.mutex_);
+            std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_, other.mutex_);
             
             C<Params...>::operator=(other);
         }
@@ -52,7 +110,7 @@ template <template <typename...> class C, typename... Params>
             if (this == &other)
                 return *this;
             
-            std::lock_guard<std::mutex> lock(mutex_, other.mutex_);
+            std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_, other.mutex_);
             
             C<Params...>::operator=(other);
             
@@ -69,7 +127,7 @@ template <template <typename...> class C, typename... Params>
             if (this == &other)
                 return *this;
             
-            std::lock_guard<std::mutex> lock(mutex_, other.mutex_);
+            std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_, other.mutex_);
             
             C<Params...>::operator=(std::move(other));
             
@@ -77,17 +135,15 @@ template <template <typename...> class C, typename... Params>
         }
         
         template <typename... Args>
-            auto empty()
+            auto&& empty()
             {
-                std::lock_guard<std::mutex> lock(mutex_);
-                
-                return C<Params...>::empty();
+                return std::move(locked<bool>(mutex_, C<Params...>::empty()));
             }
 
         template <typename... Args>
             auto insert(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::insert(std::forward<Args>(args)...);
             }
@@ -95,7 +151,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto emplace(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::emplace(std::forward<Args>(args)...);
             }
@@ -103,7 +159,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto emplace_hint(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::emplace_hint(std::forward<Args>(args)...);
             }
@@ -111,7 +167,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto push_back(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::push_back(std::forward<Args>(args)...);
             }
@@ -119,7 +175,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto push_front(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::push_front(std::forward<Args>(args)...);
             }
@@ -127,7 +183,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto emplace_back(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::emplace_back(std::forward<Args>(args)...);
             }
@@ -135,7 +191,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto emplace_front(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::emplace_front(std::forward<Args>(args)...);
             }
@@ -143,7 +199,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto resize(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::resize(std::forward<Args>(args)...);
             }
@@ -151,7 +207,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto clear(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::clear(std::forward<Args>(args)...);
             }
@@ -159,7 +215,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto erase(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::erase(std::forward<Args>(args)...);
             }
@@ -167,7 +223,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto pop_back(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::pop_back(std::forward<Args>(args)...);
             }
@@ -175,7 +231,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto pop_front(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::pop_front(std::forward<Args>(args)...);
             }
@@ -183,7 +239,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto remove(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::remove(std::forward<Args>(args)...);
             }
@@ -191,7 +247,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto remove_if(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::remove_if(std::forward<Args>(args)...);
             }
@@ -199,7 +255,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto unique(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::unique(std::forward<Args>(args)...);
             }
@@ -207,7 +263,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto merge(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::merge(std::forward<Args>(args)...);
             }
@@ -215,7 +271,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto splice(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::splice(std::forward<Args>(args)...);
             }
@@ -223,7 +279,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto swap(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::swap(std::forward<Args>(args)...);
             }
@@ -231,7 +287,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto assign(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::assign(std::forward<Args>(args)...);
             }
@@ -239,7 +295,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto pop_heap(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::pop_heap(std::forward<Args>(args)...);
             }
@@ -247,7 +303,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto push_heap(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::push_heap(std::forward<Args>(args)...);
             }
@@ -255,7 +311,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto make_heap(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::make_heap(std::forward<Args>(args)...);
             }
@@ -263,7 +319,7 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto sort(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::sort(std::forward<Args>(args)...);
             }
@@ -271,13 +327,23 @@ template <template <typename...> class C, typename... Params>
         template <typename... Args>
             auto reverse(Args &&... args)
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<state_mutex<std::recursive_mutex>> lock(mutex_);
                 
                 return C<Params...>::reverse(std::forward<Args>(args)...);
             }
         
+        state_mutex<std::recursive_mutex> & mutex()
+        {
+            return mutex_;
+        }
+        
+        state_mutex<std::recursive_mutex> const & mutex() const
+        {
+            return mutex_;
+        }
+        
     private:
-        std::mutex mutex_;
+        state_mutex<std::recursive_mutex> mutex_;
     };
     
 template <typename... Params>
